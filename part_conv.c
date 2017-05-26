@@ -99,8 +99,8 @@ part_conv_t *part_conv_new(size_t M,
             + (((sizeof(float)*N_c)%VALIGN_BYTES) != 0))*VALIGN_BYTES;
 #ifdef FFT_LIB_VDSP
     /* For split complex type, we ensure real and imaginary have proper alignment */
-    size_t irs_sz = 2*((sizeof(float)*N_c/2+1)/VALIGN_BYTES
-            + (((sizeof(float)*N_c/2+1)%VALIGN_BYTES) != 0)*VALIGN_BYTES);
+    size_t irs_sz = 2*(((sizeof(float)*(N_c/2+1))/VALIGN_BYTES
+            + (((sizeof(float)*(N_c/2+1))%VALIGN_BYTES) != 0))*VALIGN_BYTES);
     /* Size of data structures to get to start of data segment */
     size_t head_sz = sizeof(part_conv_t) + K*sizeof(f32_part_t)
         + 2*D*sizeof(z32_part_t);
@@ -110,8 +110,8 @@ part_conv_t *part_conv_new(size_t M,
         + 2*D*sizeof(z32_part_t) + K*conv_sz
         + (2*D+1)*irs_sz + VALIGN_BYTES - 1;
 #endif  
-    void *mem = PART_CONV_CALLOC(ms,sizeof(char)); if (!mem) { return NULL; }
-    void *dat = mem + head_sz + VALIGN_BYTES 
+    char *mem = PART_CONV_CALLOC(ms,sizeof(char)); if (!mem) { return NULL; }
+    char *dat = mem + head_sz + VALIGN_BYTES 
         - ((size_t)mem + head_sz) % VALIGN_BYTES;
     /* Assign data structures to parts of allocated memory */
     part_conv_t *pc = (part_conv_t*)mem;
@@ -126,38 +126,38 @@ part_conv_t *part_conv_new(size_t M,
     f32_part_t *first_conv = NULL;
     while (K--) {
         f32_part_t *tmp = pc->convs;
-        pc->convs = mem; pc->convs->next = tmp;
+        pc->convs = (f32_part_t*)mem; pc->convs->next = tmp;
         first_conv = first_conv ? first_conv : pc->convs;
         mem += sizeof(f32_part_t);
-        pc->convs->f = dat; dat += conv_sz;
+        pc->convs->f = (float*)dat; dat += conv_sz;
     }
     /* Make into ring */
     first_conv->next = pc->convs;
     /* Only past inputs (not ir_parts) need be ring */
-    z32_part_t *first_past_in;
+    z32_part_t *first_past_in = NULL;
     /* Paranoia to keep list iteration from advancing into unknown memory */
     pc->ir_parts = NULL; 
     while (D--) {
         z32_part_t *tmp = pc->ir_parts;
-        pc->ir_parts = mem; pc->ir_parts->next = tmp;
+        pc->ir_parts = (z32_part_t*)mem; pc->ir_parts->next = tmp;
         mem += sizeof(z32_part_t);
         tmp = pc->past_ins; 
-        pc->past_ins = mem; pc->past_ins->next = tmp;
+        pc->past_ins = (z32_part_t*)mem; pc->past_ins->next = tmp;
         first_past_in = first_past_in ? first_past_in : pc->past_ins;
         mem += sizeof(z32_part_t);
 #ifdef  FFT_LIB_VDSP 
-        pc->ir_parts->z.realp = dat; dat += irs_sz/2;
-        pc->ir_parts->z.imagp = dat; dat += irs_sz/2;
-        pc->past_ins->z.realp = dat; dat += irs_sz/2;
-        pc->past_ins->z.imagp = dat; dat += irs_sz/2;
+        pc->ir_parts->z.realp = (float*)dat; dat += irs_sz/2;
+        pc->ir_parts->z.imagp = (float*)dat; dat += irs_sz/2;
+        pc->past_ins->z.realp = (float*)dat; dat += irs_sz/2;
+        pc->past_ins->z.imagp = (float*)dat; dat += irs_sz/2;
 #endif  
     }
     /* make into ring */
     first_past_in->next = pc->past_ins;
 #ifdef  FFT_LIB_VDSP 
     /* Assign memory for temporary DFT processing buffer */
-    pc->convt.realp = dat; dat += irs_sz/2;
-    pc->convt.imagp = dat; dat += irs_sz/2;
+    pc->convt.realp = (float*)dat; dat += irs_sz/2;
+    pc->convt.imagp = (float*)dat; dat += irs_sz/2;
     /* Allocate DFT setup for forward and inverse */
     pc->dft_setup_fw = vDSP_DFT_zrop_CreateSetup(0,N_c,vDSP_DFT_FORWARD);
     pc->dft_setup_bw = vDSP_DFT_zrop_CreateSetup(0,N_c,vDSP_DFT_INVERSE);
@@ -174,7 +174,7 @@ void part_conv_free(part_conv_t *pc)
 
 /* Set the IR from a time domain representation.
    ir must have length pc->N_ir.
-   TODO: Eventually there will also be a way to set using the frequency-domain paritions.  */
+   TODO: Eventually there will also be a way to set using the frequency-domain partitions.  */
 void part_conv_set_ir_td (part_conv_t *pc,
                           const float *ir)
 {
@@ -219,7 +219,7 @@ void part_conv_proc(part_conv_t *pc, float *x)
             pc->past_ins->z.imagp);
     /* Extract nyquist from DC bin */
     pc->past_ins->z.realp[pc->N_c/2] = pc->past_ins->z.imagp[0]; pc->past_ins->z.imagp[0] = 0;
-    /* Sum in this and past inputs convolved (multiplied) with repective IR
+    /* Sum in this and past inputs convolved (multiplied) with respective IR
        parts. First zero block of temporary convolution buffer.*/
     vDSP_vclr(pc->convt.imagp,1,pc->N_c/2+1);
     vDSP_vclr(pc->convt.realp,1,pc->N_c/2+1);
