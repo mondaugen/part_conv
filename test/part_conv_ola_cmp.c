@@ -1,5 +1,8 @@
 /* Compare conv_ola and part_conv */
 
+#include <stdlib.h>
+#include <time.h> 
+
 #include "part_conv.h"
 #include "conv_ola.h"
 
@@ -7,29 +10,33 @@
 #error "Only works with 32 bit floats."
 #endif  
 
-#define ERR_TOL 1.e-6
+#define ERR_TOL 1.e-4
 
 #ifndef  FABS
-#define FABS(x) ((x)<0.)?((-1)*(x)):(x) 
+#define FABS(x) (((x)<0.)?((-1)*(x)):(x))
 #endif  
 
 #define TESTCHK(x,s) \
     if (x) { puts(s " passed."); } else { puts(s " failed."); }
 
-int check_close(float *x, float *y, size_t n)
+int check_close(float *x, float *y, size_t n, float *maxe, size_t *maxen)
 {
     int ret = 1;
-    while (n--) { ret = ret && (FABS(x[n]-y[n]) < ERR_TOL); }
+    while (n--) { ret = ret && (FABS(x[n]-y[n]) < ERR_TOL);
+        *maxe = FABS(x[n]-y[n]) > *maxe ? FABS(x[n]-y[n]) : *maxe;
+        *maxen = FABS(x[n]-y[n]) == *maxe ? n : *maxen; }
     return ret;
 }
 
 int ConvOLA_test(void)
 {
     /* FFT size */
-    size_t N = 128, H = 8, n, N_x = 100000, N_x_, N_=256;
+//    size_t N = 128, H = 8, n, N_x = 100000, N_x_, N_=256;
 //    size_t N = 16, H = 8, n, N_x = 100000, N_x_, N_=32;
-//    size_t N = 8192, H = 64, n, N_x = 100000, N_x_, N_=16384;
+    size_t N = 8192, H = 64, n, N_x = 100000, N_x_, N_=16384;
     N_x_ = (N_x/H + 1)*H;
+
+    srandom(time(NULL));
 
     float *ir_td = (float*)malloc(sizeof(float)*N);
     for(n=0;n<N;n++){ir_td[n]=2.*random()/(float)RAND_MAX - 1.;}
@@ -93,8 +100,11 @@ int ConvOLA_test(void)
 
     h = 0;
     while (h < N_x_) { part_conv_proc(pc,out_p+h); h += H; }
-    return check_close(out_c,out_p,N_x_-1);
-
+    float maxe = 0; size_t maxen = N_x_; int ret;
+    ret = check_close(out_c,out_p,N_x_,&maxe,&maxen);
+    printf("N_x_: %zu\n",N_x_);
+    printf("max error: %g, index %zu\n",maxe,maxen);
+    return ret;
 }
 
 int main (void)
