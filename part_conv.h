@@ -20,8 +20,7 @@ typedef struct part_conv_t part_conv_t;
 #endif  
 
 part_conv_t *part_conv_new(size_t M,
-                           size_t N_ir,
-                           size_t D);
+                           size_t N_ir);
 void part_conv_free(part_conv_t *pc);
 void part_conv_set_ir_td (part_conv_t *pc,
                           const float *ir);

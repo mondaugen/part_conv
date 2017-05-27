@@ -26,8 +26,6 @@ struct part_conv_t {
     /* Total size of convolution buffer rounded to next greater
        power of 2 */
     size_t N_c; 
-    /* Number of times M fits into N_c */
-    size_t K;
     /* Number of parts that IR has been partitioned into */
     size_t D;
     /* Previous convolutions (time domain) */
@@ -45,33 +43,11 @@ struct part_conv_t {
 #endif  
 };
 
-static int is_pow_2(size_t x)
-{
-    int bitidx = (int)(sizeof(size_t) * 8 - 1);
-    while (((x & (1 << bitidx)) == 0) && (bitidx >= 0)) {
-        bitidx--;
-    }
-    if (bitidx == -1) {
-        /* All bits were 0. 0 is not a power of 2. */
-        return 0;
-    }
-    bitidx--;
-    while (((x & (1 << bitidx)) == 0) && (bitidx >= 0)) {
-        bitidx--;
-    }
-    if (bitidx == -1) {
-        /* All bits after the initial set bit were 0, is a power of 2. */
-        return 1;
-    }
-    /* Some bit was set after the initial set bit. Not power of 2. */
-    return 0;
-}
+/* Check if x is power of 2 */
+static int is_pow_2(size_t x) { return x == (size_t)pow(2.,floor(log(x)/log(2.))); }
 
 /* Return the next power of 2 greater than or equal to x */
-static int next_pow_2(float x)
-{
-    return (int)pow(2.,ceil(log(x)/log(2.)));
-}
+static int next_pow_2(float x) { return (int)pow(2.,ceil(log(x)/log(2.))); }
 
 size_t part_conv_opt_D(size_t M, size_t N_ir) {
     /* TODO */
@@ -80,16 +56,18 @@ size_t part_conv_opt_D(size_t M, size_t N_ir) {
 
 /* Create new partition convolver that can process vectors of length M and
    convolves with IRs of length N_ir partitioned into parts of size N_ir/D. M
-   must divide next_pow_2(N_ir/D+M-1). N_ir must be divisible by D. The best
-   value of D can be estimated using part_conv_opt_D. */
+   must divide N_ir. D will be filled in based on N_ir and M. Both must be
+   powers of 2. */
 part_conv_t *part_conv_new(size_t M,
-                           size_t N_ir,
-                           size_t D)
+                           size_t N_ir)
 {
-    if (N_ir % D) { return NULL; }
-    size_t N_c = (int)next_pow_2((float)N_ir/D + M - 1);
-    if (N_c % M) { return NULL; }
-    size_t K = N_c / M;
+    if ((!is_pow_2(M)) || (!is_pow_2(N_ir))) { return NULL; }
+    if (N_ir < M) { return NULL; }
+    if (N_ir % M) { return NULL; }
+    size_t D = N_ir/M;
+    size_t N_c = 2*M; // same as (int)next_pow_2((float)N_ir/D + M - 1)
+    size_t K = 2;
+    /* In the following, K = 2 */
     /* Need to store previous convolutions = K*N_c floats,
        Parts of IR = D*(N_c/2+1) complex,
        Previous transformed inputs = D*(N_c/2+1) complex,
@@ -119,7 +97,6 @@ part_conv_t *part_conv_new(size_t M,
         .M = M, 
         .N_ir = N_ir, 
         .N_c = N_c, 
-        .K = K,
         .D = D,
     };
     mem += sizeof(part_conv_t);
@@ -246,7 +223,7 @@ void part_conv_proc(part_conv_t *pc, float *x)
     /* Deinterleave split format into current convolution buffer */
     vDSP_ztoc(&pc->convt,1,(DSPComplex*)pc->convs->f,2,pc->N_c/2);
     /* Accumulate past convolutions into output */
-    size_t K = pc->K, x_n = 0;
+    size_t K = 2, x_n = 0;
     f32_part_t *conv = pc->convs;
     vDSP_vclr(x,1,pc->M);
     while (K--) {

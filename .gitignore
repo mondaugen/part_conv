@@ -1,3 +1,5 @@
 *.o
 *.bin
 *.dSYM
+*.DS_Store
+*.dtps

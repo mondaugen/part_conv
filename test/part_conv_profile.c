@@ -17,16 +17,16 @@
 #define TESTCHK(x,s) \
     if (x) { puts(s " passed."); } else { puts(s " failed."); }
 
-#define PC_DEF(M,N,D) \
-    static part_conv_t *pc_new_ ## M ## _ ## N ## _ ## D (float *ir) { \
-      part_conv_t *pc = part_conv_new(M,N,D); part_conv_set_ir_td(pc,ir); return pc;\
+#define PC_DEF(M,N) \
+    static part_conv_t *pc_new_ ## M ## _ ## N (float *ir) { \
+      part_conv_t *pc = part_conv_new(M,N); part_conv_set_ir_td(pc,ir); return pc;\
     }; \
-    static void pc_call_ ## M ## _ ## N ## _ ## D (part_conv_t *pc, float *x, size_t L) { \
+    static void pc_call_ ## M ## _ ## N (part_conv_t *pc, float *x, size_t L) { \
       while ((L -= M) >= M) { part_conv_proc(pc,x); x += M; } \
     }
 
-#define PC_NEW_CALL(M,N,D,ir)  pc_new_ ## M ## _ ## N ## _ ## D (ir)
-#define PC_CALL_CALL(M,N,D,pc,x,L)  pc_call_ ## M ## _ ## N ## _ ## D (pc, x, L)
+#define PC_NEW_CALL(M,N,ir)  pc_new_ ## M ## _ ## N (ir)
+#define PC_CALL_CALL(M,N,pc,x,L)  pc_call_ ## M ## _ ## N (pc, x, L)
 
 int check_close(float *x, float *y, size_t n)
 {
@@ -40,7 +40,7 @@ int part_conv_correct_test (void)
     float in[] = {1.,0,.5,0,0,0,0,0},
           ir[] = {0.5, 0.25, -0.5, -0.25},
           outc[] = {0.5, 0.25, -0.5+0.25, -0.25+0.125,-0.25,-0.125,0.,0.};
-    part_conv_t *pc = part_conv_new(2,4,2); if (!pc) { return -1; }
+    part_conv_t *pc = part_conv_new(2,4); if (!pc) { return -1; }
     part_conv_set_ir_td(pc,ir);
     part_conv_proc(pc,in);
     part_conv_proc(pc,in+2);
@@ -48,70 +48,6 @@ int part_conv_correct_test (void)
     part_conv_proc(pc,in+6);
     return check_close(in,outc,8);
 }
-
-#define M 64
-#define N_ir 8192 
-#define N_xp 11
-
-PC_DEF(64,8192,1);
-PC_DEF(64,8192,2);
-PC_DEF(64,8192,4);
-PC_DEF(64,8192,8);
-PC_DEF(64,8192,16);
-PC_DEF(64,8192,32);
-PC_DEF(64,8192,64);
-PC_DEF(64,8192,128);
-PC_DEF(64,8192,256);
-PC_DEF(64,8192,512);
-PC_DEF(64,8192,1024);
-
-int part_conv_prof_test(void)
-{
-    size_t N_x = M*1000;
-    float *x = (float*)calloc(N_x+N_ir-1,sizeof(float));
-    float *ir = (float*)calloc(N_ir,sizeof(float));
-    float **xs = (float**)calloc(N_xp+1,sizeof(float*));
-    size_t WTF = N_x+N_ir-1;
-    if (!x) { return -1; }
-    srandom(time(NULL));
-    {size_t n; for (n=0;n<N_x;n++) {x[n] = 2.*random()/(float)RAND_MAX - 1.; }}
-    {size_t n; for (n=0;n<N_ir;n++) {ir[n] = 2.*random()/(float)RAND_MAX - 1.; }}
-    {size_t n; for (n=0;n<N_xp;n++) { 
-                                        xs[n] = (void*)malloc((N_x+N_ir-1)*sizeof(float));
-//                                        posix_memalign((void**)&xs[n],64*sizeof(void*),(N_x+N_ir-1)*sizeof(float));
-                                       memcpy(xs[n],x,sizeof(float)*(N_x+N_ir-1)); }}
-    part_conv_t *pc1 = PC_NEW_CALL(64,8192,1,ir);
-    part_conv_t *pc2 = PC_NEW_CALL(64,8192,2,ir);
-    part_conv_t *pc4 = PC_NEW_CALL(64,8192,4,ir);
-    part_conv_t *pc8 = PC_NEW_CALL(64,8192,8,ir);
-    part_conv_t *pc16 = PC_NEW_CALL(64,8192,16,ir);
-    part_conv_t *pc32 = PC_NEW_CALL(64,8192,32,ir);
-    part_conv_t *pc64 = PC_NEW_CALL(64,8192,64,ir);
-    part_conv_t *pc128 = PC_NEW_CALL(64,8192,128,ir);
-    part_conv_t *pc256 = PC_NEW_CALL(64,8192,256,ir);
-    part_conv_t *pc512 = PC_NEW_CALL(64,8192,512,ir);
-    part_conv_t *pc1024 = PC_NEW_CALL(64,8192,1024,ir);
-
-    PC_CALL_CALL(64,8192,1    ,pc1,xs[0],WTF);
-    PC_CALL_CALL(64,8192,2    ,pc2,xs[1],WTF);
-    PC_CALL_CALL(64,8192,4    ,pc4,xs[2],WTF);
-    PC_CALL_CALL(64,8192,8    ,pc8,xs[3],WTF);
-    PC_CALL_CALL(64,8192,16   ,pc16,xs[4],WTF);
-    PC_CALL_CALL(64,8192,32   ,pc32,xs[5],WTF);
-    PC_CALL_CALL(64,8192,64   ,pc64,xs[6],WTF);
-    PC_CALL_CALL(64,8192,128  ,pc128,xs[7],WTF);
-    PC_CALL_CALL(64,8192,256  ,pc256,xs[8],WTF);
-    PC_CALL_CALL(64,8192,512  ,pc512,xs[9],WTF);
-    PC_CALL_CALL(64,8192,1024 ,pc1024,xs[10],WTF);
-
-    int ret = 1;
-    {size_t n; for (n=1;n<(N_xp-1);n++) { ret = ret && check_close(xs[n],xs[n+1],WTF); }}
-    return ret;
-}
-
-#undef M
-#undef N_ir
-#undef N_xp
 
 int part_conv_simple_test(void)
 {
@@ -128,9 +64,9 @@ int part_conv_simple_test(void)
     {size_t n; for (n=0;n<N_x;n++) {x[n] = 2.*random()/(float)RAND_MAX - 1.; }}
     {size_t n; for (n=0;n<N_ir;n++) {ir[n] = 2.*random()/(float)RAND_MAX - 1.; }}
     {size_t n; for (n=0;n<N_xp;n++) { xs[n] = (void*)malloc((WTF)*sizeof(float));
-//                                        posix_memalign((void**)&xs[n],64*sizeof(void*),(N_x+N_ir-1)*sizeof(float));
                                        memcpy(xs[n],x,sizeof(float)*(WTF)); }}
-    part_conv_t *pc = part_conv_new(M,N_ir,1);
+    part_conv_t *pc = part_conv_new(M,N_ir);
+    if (!pc) { return 0; }
     part_conv_set_ir_td(pc,ir);
     size_t L = WTF;
     float *x_ = x;
@@ -179,7 +115,8 @@ int part_conv_correct_test_2(void)
         2.4151884 ,  1.96696851,  1.62203218,  1.86412751,  1.90567553,
         0.84743063,  1.53660705,  0.96366293,  0.80398781,  0.72840369,
         0.69244286,  0.76189612,  0.2738613 ,  0.40470885, 0.};
-    part_conv_t *pc = part_conv_new(M,N_ir,4);
+    part_conv_t *pc = part_conv_new(M,N_ir);
+    if (!pc) { return 0; }
     part_conv_set_ir_td(pc,ir);
     size_t WTF, L = N_ir + N_x - 1;
     WTF = L;
@@ -195,6 +132,5 @@ int main (void)
     TESTCHK(part_conv_correct_test(),"Test correct:");
     TESTCHK(part_conv_simple_test(),"Test simple:");
     TESTCHK(part_conv_correct_test_2(),"Test correct 2:");
-    TESTCHK(part_conv_prof_test(),"Test prof:");
     return 0;
 }
